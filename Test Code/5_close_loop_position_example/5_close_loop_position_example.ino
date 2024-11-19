@@ -1,112 +1,196 @@
-/*
-MKS ESP32 FOC Closed Loop Position Control Example; Test Library：SimpleFOC 2.1.1; Test Hardware：MKS ESP32 FOC V1.0
-Enter "T+Position" in the serial monitor to make the two motors rotate in closed loop
-For example, input the radian system "T3.14" to let the two motors rotate 180°
-When using your own motor, do remember to modify the default number of pole pairs, the value in BLDCMotor()
-The default power supply voltage set by the program is 12V
-Please remember to modify the values in voltage_power_supply and voltage_limit variables if you use other voltages for power supply
-The motor targeted by the default PID is the YT2804 motor. To use your own motor.
-You need to modify the PID parameters to achieve better results.
-*/
+// MKS ESP32 FOC V2.0 | Open Loop Position Example | Library:SimpleFOC 2.2.1 | Hardware:MKS ESP32 FOC V2.0 & MKS AS5600
+
+// !!!Notice!!!
+// ①Enter "T+number" in the serial port to set the position of the two motors. For example, if you want the motor to rotate to 180°, enter "T3.14" (180° in radians)
+// ②When using your own motor, be sure to modify the default number of pole pairs, that is, the value in BLDCMotor(7), to the number of pole pairs of your own motor.
+// ③Please set the correct voltage_limit value according to the selected motor. It is recommended to set it between 0.5 and 1.0 for the aircraft model motor and below 4 for the gimbal motor. Excessive voltage and current may burn out the driver board!
+// ④The pid parameters of this routine can control the 2808 model aircraft motor. If you want to achieve better results or use other motors, please adjust the pid parameters yourself.
 
 #include <SimpleFOC.h>
-
 
 MagneticSensorI2C sensor = MagneticSensorI2C(AS5600_I2C);
 MagneticSensorI2C sensor1 = MagneticSensorI2C(AS5600_I2C);
 TwoWire I2Cone = TwoWire(0);
 TwoWire I2Ctwo = TwoWire(1);
 
-//Motor Parameters
-BLDCMotor motor = BLDCMotor(7);                               //According to pole pairs of the selected motor, modify the value of BLDCMotor() here
-BLDCDriver3PWM driver = BLDCDriver3PWM(32,33,25,22);
+//Motor parameters
+BLDCMotor motor = BLDCMotor(7);
+BLDCDriver3PWM driver = BLDCDriver3PWM(32, 33, 25, 12);
 
-BLDCMotor motor1 = BLDCMotor(7);                              //Also modify the value of BLDCMotor() here
-BLDCDriver3PWM driver1 = BLDCDriver3PWM(26,27,14,12);
+BLDCMotor motor1 = BLDCMotor(7);
+BLDCDriver3PWM driver1 = BLDCDriver3PWM(26, 27, 14, 12);
 
-//Command Settings
-//Enter "T+Position" in the serial monitor to make the two motors rotate in closed loop
-//For example, input the radian system "T3.14" to let the two motors rotate 180°
-float target_velocity = 0;
+//Command settings
+float target_angle = 0;
+uint32_t prev_millis;
+
+//Setting the alarm voltage
+#define UNDERVOLTAGE_THRES 11.1
+
 Commander command = Commander(Serial);
-void doTarget(char* cmd) { command.scalar(&target_velocity, cmd); }
+void doTarget(char *cmd)
+{
+  command.scalar(&target_angle, cmd);
+}
 
-void setup() {
-  I2Cone.begin(19,18, 400000); 
-  I2Ctwo.begin(23,5, 400000);
+void board_check();
+float get_vin_Volt();
+void board_init();
+bool flag_under_voltage = false;
+
+void setup()
+{
+  Serial.begin(115200);
+  board_init();
+
+  I2Cone.begin(19, 18, 400000UL); // AS5600_M0
+  I2Ctwo.begin(23, 5, 400000UL);  // AS5600_M1
   sensor.init(&I2Cone);
   sensor1.init(&I2Ctwo);
-  //Connect the Motor Object with the Sensor Object
+  //Connect the motor object and the sensor object
   motor.linkSensor(&sensor);
   motor1.linkSensor(&sensor1);
 
-  //Supply Voltage Setting [V]
-  driver.voltage_power_supply = 12;                   //According to the supply voltage, modify the value of voltage_power_supply here
+  //Supply voltage setting [V]
+  driver.voltage_power_supply = get_vin_Volt();
   driver.init();
 
-  driver1.voltage_power_supply = 12;                  //Also modify the value of voltage_power_supply here
+  driver1.voltage_power_supply = get_vin_Volt();
   driver1.init();
-  //Connect the Motor and Driver Objects
+  //Connect the motor and driver objects
   motor.linkDriver(&driver);
   motor1.linkDriver(&driver1);
-  
-  //FOC Model Selection
+
+  // FOC model selection
   motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
   motor1.foc_modulation = FOCModulationType::SpaceVectorPWM;
-  //Motion Control Mode Settings
+  //Motion control mode settings
   motor.controller = MotionControlType::angle;
   motor1.controller = MotionControlType::angle;
 
-  //Speed PID Setting                                     
-  motor.PID_velocity.P = 0.1;             //According to the selected motor, modify the PID parameters here to achieve better results
-  motor1.PID_velocity.P = 0.1;
-  motor.PID_velocity.I = 1;
-  motor1.PID_velocity.I = 1;
-  //Angle PID Setting 
-  motor.P_angle.P = 20;
-  motor1.P_angle.P = 20;
-  //Motor Maximum Limit Voltage
-  motor.voltage_limit = 1;                //According to the supply voltage, modify the value of voltage_limit here
-  motor1.voltage_limit = 1;               //Also modify the value of voltage_limit here
-  
-  //Speed Low-pass Filter Time Constant
+  //Speed ​​PI loop settings
+  motor.PID_velocity.P = 0.021;
+  motor1.PID_velocity.P = 0.021;
+  motor.PID_velocity.I = 0.12;
+  motor1.PID_velocity.I = 0.12;
+  //Angle P ring setting
+  motor.P_angle.P = 30;
+  motor1.P_angle.P = 30;
+  //Maximum motor limiting voltage
+  motor.voltage_limit = 1;  // [V] Please modify and check this value carefully, excessive voltage and current may cause the driver board to burn out!!!
+  motor1.voltage_limit = 1; // [V] Please modify and check this value carefully, excessive voltage and current may cause the driver board to burn out!!!
+
+  //Speed ​​low pass filter time constant
   motor.LPF_velocity.Tf = 0.01;
   motor1.LPF_velocity.Tf = 0.01;
 
-  //Maximum Velocity Limit Setting
+  //Set a maximum speed limit
   motor.velocity_limit = 20;
   motor1.velocity_limit = 20;
 
-  Serial.begin(115200);
   motor.useMonitoring(Serial);
   motor1.useMonitoring(Serial);
 
-  
-  //Initialize the Motor
+  //Initialize the motor
   motor.init();
   motor1.init();
   //Initialize FOC
   motor.initFOC();
   motor1.initFOC();
-  command.add('T', doTarget, "target velocity");
+  command.add('T', doTarget, "target angle");
 
   Serial.println(F("Motor ready."));
   Serial.println(F("Set the target velocity using serial terminal:"));
-  
 }
 
+void loop()
+{
 
-
-void loop() {
-  Serial.print(sensor.getAngle()); 
-  Serial.print(" - "); 
-  Serial.print(sensor1.getAngle());
-  Serial.println();
   motor.loopFOC();
   motor1.loopFOC();
 
-  motor.move(target_velocity);
-  motor1.move(target_velocity);
-  
-  command.run();
+  motor.move(target_angle);
+  motor1.move(target_angle);
+
+  //When the voltage is lower than the set value, the motor will be disabled.
+  board_check();
+
+  //User Communications
+  if (!flag_under_voltage)
+    command.run();
+
+  // Serial.print(sensor.getAngle());
+  // Serial.print(" - ");
+  // Serial.print(sensor1.getAngle());
+  // Serial.println();
+}
+
+void board_init()
+{
+  pinMode(32, INPUT_PULLUP);
+  pinMode(33, INPUT_PULLUP);
+  pinMode(25, INPUT_PULLUP);
+  pinMode(26, INPUT_PULLUP);
+  pinMode(27, INPUT_PULLUP);
+  pinMode(14, INPUT_PULLUP);
+
+  analogReadResolution(12); // 12bit
+
+  float VIN_Volt = get_vin_Volt();
+  while (VIN_Volt <= UNDERVOLTAGE_THRES)
+  {
+    VIN_Volt = get_vin_Volt();
+    delay(100);
+    Serial.printf("Waiting for power on, current voltage%.2f\n", VIN_Volt);
+  }
+  Serial.printf("Calibrating motor...Current voltage%.2f\n", VIN_Volt);
+}
+
+float get_vin_Volt()
+{
+  return analogReadMilliVolts(13) * 8.5 / 1000;
+}
+
+void board_check()
+{
+
+  uint32_t curr_millis = millis();
+  static uint8_t enableState = 0;
+
+  if (curr_millis - prev_millis >= 1000)
+  {
+    float vin_Volt = get_vin_Volt();
+
+    if (vin_Volt < UNDERVOLTAGE_THRES)
+    {
+      flag_under_voltage = true;
+      enableState = 0;
+      uint8_t count = 5;
+      while (count--)
+      {
+        vin_Volt = get_vin_Volt();
+        if (vin_Volt > UNDERVOLTAGE_THRES)
+        {
+          flag_under_voltage = false;
+          break;
+        }
+      }
+    }
+    else
+    {
+      flag_under_voltage = false;
+    }
+    if (flag_under_voltage)
+    {
+      motor.disable();
+      motor1.disable();
+    }
+    else if (0 == enableState && flag_under_voltage == false)
+    {
+      enableState = 1;
+      motor.enable();
+      motor1.enable();
+    }
+    prev_millis = curr_millis;
+  }
 }
