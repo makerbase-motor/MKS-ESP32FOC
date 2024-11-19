@@ -1,5 +1,6 @@
 # MKS-ESP32 FOC V1.0
 ## This page is for MKS ESC32 FOC V1.0. There are differences with MKS ESC32 FOC V2.0, so please be careful to distinguish.
+![MKS ESP32 FOC V1.0](https://github.com/makerbase-motor/MKS-ESP32FOC/blob/MKS-ESP32-FOC-V1.0/image/MKS%20ESP32%20FOC%20V1.0.png)
 ## [If your motherboard is MKS ESP32 FOC V2.0, please click here to jump.](https://github.com/makerbase-motor/MKS-ESP32FOC/tree/MKS-ESP32-FOC-V2.0)
 ## How to buy
 [Aliexpress Store](https://vi.aliexpress.com/item/3256805324882671.html?gatewayAdapt=glo2vnm)
