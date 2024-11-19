@@ -1,0 +1,22 @@
+❗Read❗Before❗You❗Begin❗
+
+① The parameters adapted by this set of routines are 2808 aircraft model motors. Please pay attention to modify the values ​​of the following parameters when using other motors:
+
+BLDCMotor()    pole pair number;
+voltage_limit    motor voltage limit The recommended setting value for aircraft model motors is 1~0.5, and the recommended setting for PTZ motors is below 4;
+current_limit    motor current limit This value should be greater than the current loop parameter and less than the maximum safe current of the motor;
+If there is no input voltage detection in a routine, the value of voltage_power_supply also needs to be modified;
+The above parameters need to be especially careful, and a large wrong value may cause the board to burn!
+
+② The open-loop control mode is a test routine, and the heating of the motor is inevitable. Be careful not to get burned!
+Please do not run the open-loop routine for more than one minute, otherwise it will cause overheating and burn the motor or circuit board!
+
+③ The pid parameters in the closed-loop routine have been tested and can be used to drive 2808 aircraft model motors and 2804 PTZ motors.
+If you want better control effects, or when using other motors, please adjust the pid parameters yourself.
+
+④MKS ESP32 FOC V2.0 can be powered by USB and burned with programs. It is recommended to burn the program first and then power it on.
+
+⑤MKS ESP32 FOC V1.0&2.0 comes with a test program for the AS5600 encoder. If you notice it, please don't misunderstand it!
+Therefore, some components and interfaces will have signal flow. Although it will not cause the board to burn, it is recommended that you burn the program first and then connect the input power when using it for the first time.
+
+Thank you for purchasing Makerbase products!
